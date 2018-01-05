@@ -1,12 +1,13 @@
+from __future__ import absolute_import
 import typing
 import pandas as pd
 
 from . import validation
 from .validation_warning import ValidationWarning
 
-class Column:
-    def __init__(self, name: str, validations: typing.Iterable['validation._BaseValidation'] = [], allow_empty=False):
-        """
+class Column(object):
+    def __init__(self, name, validations = [], allow_empty=False):
+        u"""
         Creates a new Column object
 
         :param name: The column header that defines this column. This must be identical to the header used in the CSV/Data Frame you are validating.
@@ -17,8 +18,8 @@ class Column:
         self.validations = list(validations)
         self.allow_empty = allow_empty
 
-    def validate(self, series: pd.Series) -> typing.List[ValidationWarning]:
-        """
+    def validate(self, series):
+        u"""
         Creates a list of validation errors using the Validation objects contained in the Column
 
         :param series: A pandas Series to validate

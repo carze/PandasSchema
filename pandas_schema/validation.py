@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 import abc
 import math
 import datetime
@@ -6,20 +7,19 @@ import numpy as np
 import typing
 import operator
 
-from . import column
 from .validation_warning import ValidationWarning
 from .errors import PanSchArgumentError
 
 
-class _BaseValidation:
-    """
+class _BaseValidation(object):
+    u"""
     The validation base class that defines any object that can create a list of errors from a Series
     """
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def get_errors(self, series: pd.Series, column: 'column.Column') -> typing.Iterable[ValidationWarning]:
-        """
+    def get_errors(self, series, column):
+        u"""
         Return a list of errors in the given series
         :param series:
         :param column:
@@ -27,55 +27,55 @@ class _BaseValidation:
         """
 
 
-class _SeriesValidation(_BaseValidation):
-    """
+class SeriesValidation(_BaseValidation):
+    u"""
     Implements the _BaseValidation interface by returning a Boolean series for each element that either passes or
     fails the validation
     """
     __metaclass__ = abc.ABCMeta
 
     def __init__(self, **kwargs):
-        self._custom_message = kwargs.get('message')
+        self._custom_message = kwargs.get(u'message')
 
     @property
     def message(self):
         return self._custom_message or self.default_message
 
     @abc.abstractproperty
-    def default_message(self) -> str:
-        """
+    def default_message(self):
+        u"""
         Create a message to be displayed whenever this validation fails
         This should be a generic message for the validation type, but can be overwritten if the user provides a
         message kwarg
         """
 
     @abc.abstractmethod
-    def validate(self, series: pd.Series) -> pd.Series:
-        """
+    def validate(self, series):
+        u"""
         Returns a Boolean series, where each value of False is an element in the Series that has failed the validation
         :param series:
         :return:
         """
 
     def __invert__(self):
-        """
+        u"""
         Returns a negated version of this validation
         """
-        return _InverseValidation(self)
+        return InverseValidation(self)
 
-    def __or__(self, other: '_SeriesValidation'):
-        """
+    def __or__(self, other):
+        u"""
         Returns a validation which is true if either this or the other validation is true
         """
         return _CombinedValidation(self, other, operator.or_)
 
-    def __and__(self, other: '_SeriesValidation'):
-        """
+    def __and__(self, other):
+        u"""
         Returns a validation which is true if either this or the other validation is true
         """
         return _CombinedValidation(self, other, operator.and_)
 
-    def get_errors(self, series: pd.Series, column: 'column.Column'):
+    def get_errors(self, series, column):
 
         errors = []
 
@@ -84,7 +84,7 @@ class _SeriesValidation(_BaseValidation):
         simple_validation = ~self.validate(series)
         if column.allow_empty:
             # Failing results are those that are not empty, and fail the validation
-            validated = (series.str.len() > 0) & simple_validation
+            validated = (series.unicode.len() > 0) & simple_validation
         else:
             validated = simple_validation
 
@@ -104,50 +104,51 @@ class _SeriesValidation(_BaseValidation):
         return errors
 
 
-class _InverseValidation(_SeriesValidation):
-    """
-    Negates an ElementValidation
+class InverseValidation(SeriesValidation):
+    u"""
+    Negates an ElementValidation. Automatically created with ~validation, but can be used manually to specify a custom
+    message
     """
 
-    def __init__(self, validation: _SeriesValidation):
+    def __init__(self, validation, **kwargs):
         self.negated = validation
-        super().__init__()
+        super(InverseValidation, self).__init__(**kwargs)
 
-    def validate(self, series: pd.Series):
+    def validate(self, series):
         return ~ self.negated.validate(series)
 
     @property
     def default_message(self):
-        return self.negated.message + ' <negated>'
+        return self.negated.message + u' <negated>'
 
 
-class _CombinedValidation(_SeriesValidation):
-    """
+class _CombinedValidation(SeriesValidation):
+    u"""
     Validates if one and/or the other validation is true for an element
     """
 
-    def __init__(self, validation_a: _SeriesValidation, validation_b: _SeriesValidation, operator):
+    def __init__(self, validation_a, validation_b, operator):
         self.operator = operator
         self.v_a = validation_a
         self.v_b = validation_b
-        super().__init__()
+        super(_CombinedValidation, self).__init__()
 
-    def validate(self, series: pd.Series):
+    def validate(self, series):
         return self.operator(self.v_a.validate(series), self.v_b.validate(series))
 
     @property
     def default_message(self):
-        return '({}) {} ({})'.format(self.v_a.message, self.operator, self.v_b.message)
+        return u'({}) {} ({})'.format(self.v_a.message, self.operator, self.v_b.message)
 
 
-class CustomSeriesValidation(_SeriesValidation):
-    """
+class CustomSeriesValidation(SeriesValidation):
+    u"""
     Validates using a user-provided function that operates on an entire series (for example by using one of the pandas
     Series methods: http://pandas.pydata.org/pandas-docs/stable/api.html#series)
     """
 
-    def __init__(self, validation: typing.Callable[[pd.Series], pd.Series], message: str):
-        """
+    def __init__(self, validation, message):
+        u"""
         :param message: The error message to provide to the user if this validation fails. The row and column and
             failing value will automatically be prepended to this message, so you only have to provide a message that
             describes what went wrong, for example 'failed my validation' will become
@@ -157,19 +158,23 @@ class CustomSeriesValidation(_SeriesValidation):
             to True if the object passed validation, and False if it failed
         """
         self._validation = validation
-        super().__init__(message=message)
+        super(CustomSeriesValidation, self).__init__(message=message)
 
-    def validate(self, series: pd.Series) -> pd.Series:
+    def validate(self, series):
         return self._validation(series)
 
+    @property
+    def default_message(self):
+        return self.negated.message + u' <negated>'
 
-class CustomElementValidation(_SeriesValidation):
-    """
+
+class CustomElementValidation(SeriesValidation):
+    u"""
     Validates using a user-provided function that operates on each element
     """
 
-    def __init__(self, validation: typing.Callable[[typing.Any], typing.Any], message: str):
-        """
+    def __init__(self, validation, message):
+        u"""
         :param message: The error message to provide to the user if this validation fails. The row and column and
             failing value will automatically be prepended to this message, so you only have to provide a message that
             describes what went wrong, for example 'failed my validation' will become
@@ -179,75 +184,75 @@ class CustomElementValidation(_SeriesValidation):
             the validation, and false if it doesn't
         """
         self._validation = validation
-        super().__init__(message=message)
+        super(CustomElementValidation, self).__init__(message=message)
 
-    def validate(self, series: pd.Series) -> pd.Series:
+    def validate(self, series):
         return series.apply(self._validation)
 
 
-class InRangeValidation(_SeriesValidation):
-    """
+class InRangeValidation(SeriesValidation):
+    u"""
     Checks that each element in the series is within a given numerical range
     """
 
-    def __init__(self, min: float = -math.inf, max: float = math.inf, **kwargs):
-        """
+    def __init__(self, min = -float('inf'), max = float('inf'), **kwargs):
+        u"""
         :param min: The minimum (inclusive) value to accept
         :param max: The maximum (exclusive) value to accept
         """
         self.min = min
         self.max = max
-        super().__init__(**kwargs)
+        super(InRangeValidation, self).__init__(**kwargs)
 
     @property
     def default_message(self):
-        return 'was not in the range [{}, {})'.format(self.min, self.max)
+        return u'was not in the range [{}, {})'.format(self.min, self.max)
 
-    def validate(self, series: pd.Series) -> pd.Series:
+    def validate(self, series):
         series = pd.to_numeric(series)
         return (series >= self.min) & (series < self.max)
 
 
 class IsDtypeValidation(_BaseValidation):
-    """
+    u"""
     Checks that a series has a certain numpy dtype
     """
 
-    def __init__(self, dtype: np.dtype, **kwargs):
-        """
+    def __init__(self, dtype, **kwargs):
+        u"""
         :param dtype: The numpy dtype to check the column against
         """
         self.dtype = dtype
-        super().__init__(**kwargs)
+        super(IsDtypeValidation, self).__init__(**kwargs)
 
-    def get_errors(self, series: pd.Series, column: 'column.Column' = None):
+    def get_errors(self, series, column = None):
         if not np.issubdtype(series.dtype, self.dtype):
             return [ValidationWarning(
-                'The column has a dtype of {} which is not a subclass of the required type {}'.format(series.dtype,
+                u'The column has a dtype of {} which is not a subclass of the required type {}'.format(series.dtype,
                                                                                                       self.dtype))]
         else:
             return []
 
 
-class CanCallValidation(_SeriesValidation):
-    """
+class CanCallValidation(SeriesValidation):
+    u"""
     Validates if a given function can be called on each element in a column without raising an exception
     """
 
-    def __init__(self, func: typing.Callable, **kwargs):
-        """
+    def __init__(self, func, **kwargs):
+        u"""
         :param func: A python function that will be called with the value of each cell in the DataFrame. If this
             function throws an error, this cell is considered to have failed the validation. Otherwise it has passed.
         """
         if callable(type):
             self.callable = func
         else:
-            raise PanSchArgumentError('The object "{}" passed to CanCallValidation is not callable!'.format(type))
-        super().__init__(**kwargs)
+            raise PanSchArgumentError(u'The object "{}" passed to CanCallValidation is not callable!'.format(type))
+        super(CanCallValidation, self).__init__(**kwargs)
 
     @property
     def default_message(self):
-        return 'raised an exception when the callable {} was called on it'.format(self.callable)
+        return u'raised an exception when the callable {} was called on it'.format(self.callable)
 
     def can_call(self, var):
         try:
@@ -256,148 +261,132 @@ class CanCallValidation(_SeriesValidation):
         except:
             return False
 
-    def validate(self, series: pd.Series) -> pd.Series:
+    def validate(self, series):
         return series.apply(self.can_call)
 
 
 class CanConvertValidation(CanCallValidation):
-    """
+    u"""
     Checks if each element in a column can be converted to a Python object type
     """
 
-    """
+    u"""
     Internally this uses the same logic as CanCallValidation since all types are callable in python.
     However this class overrides the error messages to make them more directed towards types
     """
 
-    def __init__(self, _type: type, **kwargs):
-        """
+    def __init__(self, _type, **kwargs):
+        u"""
         :param _type: Any python type. Its constructor will be called with the value of the individual cell as its
             only argument. If it throws an exception, the value is considered to fail the validation, otherwise it has passed
         """
         if isinstance(_type, type):
             super(CanConvertValidation, self).__init__(_type, **kwargs)
         else:
-            raise PanSchArgumentError('{} is not a valid type'.format(_type))
+            raise PanSchArgumentError(u'{} is not a valid type'.format(_type))
 
     @property
     def default_message(self):
-        return 'cannot be converted to type {}'.format(self.callable)
+        return u'cannot be converted to type {}'.format(self.callable)
 
 
-class MatchesPatternValidation(_SeriesValidation):
-    """
+class MatchesPatternValidation(SeriesValidation):
+    u"""
     Validates that a string or regular expression can match somewhere in each element in this column
     """
 
     def __init__(self, pattern, options={}, **kwargs):
-        """
+        u"""
         :param kwargs: Arguments to pass to Series.str.contains
             (http://pandas.pydata.org/pandas-docs/stable/generated/pandas.Series.str.contains.html)
             pat is the only required argument
         """
         self.pattern = pattern
         self.options = options
-        super().__init__(**kwargs)
+        super(MatchesPatternValidation, self).__init__(**kwargs)
 
     @property
     def default_message(self):
-        return 'does not match the pattern "{}"'.format(self.pattern)
+        return u'does not match the pattern "{}"'.format(self.pattern)
 
-    def validate(self, series: pd.Series) -> pd.Series:
-        return series.astype(str).str.contains(self.pattern, **self.options)
+    def validate(self, series):
+        return series.astype('unicode').str.contains(self.pattern, **self.options)
 
 
-class TrailingWhitespaceValidation(_SeriesValidation):
-    """
+class TrailingWhitespaceValidation(SeriesValidation):
+    u"""
     Checks that there is no trailing whitespace in this column
     """
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super(TrailingWhitespaceValidation, self).__init__(**kwargs)
 
     @property
     def default_message(self):
-        return 'contains trailing whitespace'
+        return u'contains trailing whitespace'
 
-    def validate(self, series: pd.Series) -> pd.Series:
-        return ~series.astype(str).str.contains('\s+$')
+    def validate(self, series):
+        return ~series.astype(unicode).unicode.contains(u'\s+$')
 
 
-class LeadingWhitespaceValidation(_SeriesValidation):
-    """
+class LeadingWhitespaceValidation(SeriesValidation):
+    u"""
     Checks that there is no leading whitespace in this column
     """
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super(LeadingWhitespaceValidation, self).__init__(**kwargs)
 
     @property
     def default_message(self):
-        return 'contains leading whitespace'
+        return u'contains leading whitespace'
 
-    def validate(self, series: pd.Series) -> pd.Series:
-        return ~series.astype(str).str.contains('^\s+')
-
-
-class IsDistinctValidation(_SeriesValidation):
-    """
-    Checks that every element of this column is different from each other element
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    @property
-    def default_message(self):
-        return 'contains values that are not unique'
-
-    def validate(self, series: pd.Series) -> pd.Series:
-        return ~series.duplicated(keep='first')
+    def validate(self, series):
+        return ~series.astype(unicode).str.contains(u'^\s+')
 
 
-class InListValidation(_SeriesValidation):
-    """
+class InListValidation(SeriesValidation):
+    u"""
     Checks that each element in this column is contained within a list of possibilities
     """
 
-    def __init__(self, options: typing.Iterable, case_sensitive: bool = True, **kwargs):
-        """
+    def __init__(self, options, case_sensitive = True, **kwargs):
+        u"""
         :param options: A list of values to check. If the value of a cell is in this list, it is considered to pass the
             validation
         """
         self.case_sensitive = case_sensitive
         self.options = options
-        super().__init__(**kwargs)
+        super(InListValidation, self).__init__(**kwargs)
 
     @property
     def default_message(self):
-        return 'is not in the list of legal options ({})'.format(', '.join(self.options))
+        return u'is not in the list of legal options ({})'.format(u', '.join(self.options))
 
-    def validate(self, series: pd.Series) -> pd.Series:
+    def validate(self, series):
         if self.case_sensitive:
             return series.isin(self.options)
         else:
-            return series.str.lower().isin([s.lower() for s in self.options])
+            return series.unicode.lower().isin([s.lower() for s in self.options])
 
 
-class DateFormatValidation(_SeriesValidation):
-    """
+class DateFormatValidation(SeriesValidation):
+    u"""
     Checks that each element in this column is a valid date according to a provided format string
     """
 
-    def __init__(self, date_format: str, **kwargs):
-        """
+    def __init__(self, date_format, **kwargs):
+        u"""
         :param date_format: The date format string to validate the column against. Refer to the date format code
             documentation at https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior for a full
             list of format codes
         """
         self.date_format = date_format
-        super().__init__(**kwargs)
+        super(DateFormatValidation, self).__init__(**kwargs)
 
     @property
     def default_message(self):
-        return 'does not match the date format string "{}"'.format(self.date_format)
+        return u'does not match the date format string "{}"'.format(self.date_format)
 
     def valid_date(self, val):
         try:
@@ -406,5 +395,5 @@ class DateFormatValidation(_SeriesValidation):
         except:
             return False
 
-    def validate(self, series: pd.Series) -> pd.Series:
-        return series.astype(str).apply(self.valid_date)
+    def validate(self, series):
+        return series.astype(unicode).apply(self.valid_date)
