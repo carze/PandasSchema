@@ -6,7 +6,7 @@ import subprocess
 
 from setuptools import setup, find_packages
 import distutils
-from pathlib import Path
+from pathlib2 import Path
 
 here = Path(__file__).parent
 readme = (here / 'README.rst')

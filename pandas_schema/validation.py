@@ -326,7 +326,7 @@ class TrailingWhitespaceValidation(SeriesValidation):
         return u'contains trailing whitespace'
 
     def validate(self, series):
-        return ~series.astype(unicode).unicode.contains(u'\s+$')
+        return ~series.astype(unicode).str.contains(u'\s+$')
 
 
 class LeadingWhitespaceValidation(SeriesValidation):

@@ -31,23 +31,27 @@ class Schema(object):
         self.columns = list(columns)
         self.ordered = ordered
 
-    def validate(self, df):
+    def validate(self, df, ignore_extra = False):
         u"""
         Runs a full validation of the target DataFrame using the internal columns list
 
         :param df: A pandas DataFrame to validate
+        :param ignore_extra: Whether or not to ignore extra columns in validation.
         :return: A list of ValidationWarning objects that list the ways in which the DataFrame was invalid
         """
         errors = []
 
-        # It's an error if the number of columns in the schema and data frame are different
-        df_cols = len(df.columns)
-        schema_cols = len(self.columns)
-        if df_cols != schema_cols:
-            errors.append(ValidationWarning(
-                u'Invalid number of columns. The schema specifies {}, but the data frame has {}'.format(schema_cols,
-                                                                                                       df_cols)))
-            return errors
+        # If the ignore_extra param is set during validation we'll want to ignore any fields that do not have 
+        # matching fields in the schema
+        if not ignore_extra:
+            # It's an error if the number of columns in the schema and data frame are different
+            df_cols = len(df.columns)
+            schema_cols = len(self.columns)
+            if df_cols != schema_cols:
+                errors.append(ValidationWarning(
+                    u'Invalid number of columns. The schema specifies {}, but the data frame has {}'.format(schema_cols,
+                                                                                                        df_cols)))
+                return errors
 
         # We associate the column objects in the schema with data frame series either by name or by position, depending
         # on the value of self.ordered
